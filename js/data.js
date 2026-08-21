@@ -130,34 +130,92 @@ const AvadheshaData = (() => {
   }
 
   /** Parse Google's gviz JSON (wrapped in a JS callback) into rows of cells. */
-  function parseGviz(text) {
-    const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?\s*$/);
-    if (!match) throw new Error("Unexpected gviz response format");
-    const json = JSON.parse(match[1]);
-    if (json.status === "error") throw new Error("Sheet returned an error");
-    const cols = json.table.cols.map((c, i) => (c.label || c.id || `col${i}`).trim());
-    const rows = json.table.rows.map(r => r.c.map(c => (c ? c.v : null)));
-    return { cols, rows };
+function parseGviz(text) {
+  const match = text.match(
+    /google\.visualization\.Query\.setResponse\(([\s\S]*)\);?\s*$/
+  );
+
+  if (!match) {
+    throw new Error("Unexpected gviz response format");
   }
+
+  const json = JSON.parse(match[1]);
+
+  if (json.status === "error") {
+    throw new Error("Sheet returned an error");
+  }
+
+  const cols = json.table.cols.map(
+    (c, i) => (c.label || c.id || `col${i}`).trim()
+  );
+
+  const rows = json.table.rows.map(row =>
+    row.c.map(cell => {
+      if (!cell) return null;
+
+      /*
+       * Google Sheets can return:
+       * - v = displayed/calculated value
+       * - f = formula
+       *
+       * Keep both available.
+       */
+      return {
+        value: cell.v ?? null,
+        formula: cell.f ?? null
+      };
+    })
+  );
+
+  return { cols, rows };
+}
 
   /** Turn header row + data rows into an array of clean row-objects keyed by header name. */
   function rowsToObjects(cols, rows) {
-    // Sheet's row 1 is a header row of column keys (category_slug, item_en, ...).
-    // gviz sometimes returns generic col ids (A, B, C) when the header row
-    // isn't formatted as a header — handle both by using row[0] as fallback header.
-    let headerNames = cols;
-    let dataRows = rows;
-    const looksGeneric = cols.every(c => /^[A-Z]$|^col\d+$/.test(c));
-    if (looksGeneric && rows.length) {
-      headerNames = rows[0].map(v => (v == null ? "" : String(v).trim()));
-      dataRows = rows.slice(1);
-    }
-    return dataRows.map(r => {
-      const obj = {};
-      headerNames.forEach((h, i) => { obj[h] = r[i]; });
-      return obj;
+  let headerNames = cols;
+  let dataRows = rows;
+
+  const looksGeneric = cols.every(
+    c => /^[A-Z]$|^col\d+$/.test(c)
+  );
+
+  if (looksGeneric && rows.length) {
+    headerNames = rows[0].map(cell => {
+      if (cell && typeof cell === "object") {
+        return cell.value == null
+          ? ""
+          : String(cell.value).trim();
+      }
+
+      return cell == null
+        ? ""
+        : String(cell).trim();
     });
+
+    dataRows = rows.slice(1);
   }
+
+  return dataRows.map(row => {
+    const obj = {};
+
+    headerNames.forEach((header, index) => {
+      const cell = row[index];
+
+      if (
+        cell &&
+        typeof cell === "object" &&
+        Object.prototype.hasOwnProperty.call(cell, "value")
+      ) {
+        obj[header] = cell.value;
+        obj[`__formula_${header}`] = cell.formula;
+      } else {
+        obj[header] = cell ?? null;
+      }
+    });
+
+    return obj;
+  });
+}
 
   /** Validate + normalise one menu row. Returns null if the row should be skipped. */
   function cleanMenuRow(row) {
@@ -182,16 +240,38 @@ const AvadheshaData = (() => {
    * Keep the image URL from Google Sheets exactly as supplied.
    * Also support common variations of the column name.
    */
-  const rawImage =
-    row.image_link ??
-    row.image_url ??
-    row["Image Link"] ??
-    row["Image URL"] ??
-    row.image ??
-    row.Image ??
-    row.photo ??
-    row.Photo ??
-    "";
+ let rawImage =
+  row.image_link ??
+  row.image_url ??
+  row["Image Link"] ??
+  row["Image URL"] ??
+  row.image ??
+  row.Image ??
+  row.photo ??
+  row.Photo ??
+  "";
+
+// If the image cell contains a Google Sheets formula,
+// try to extract the URL from it.
+const imageFormula =
+  row.__formula_image_link ||
+  row.__formula_image_url ||
+  row.__formula_Image_Link ||
+  row.__formula_Image_URL ||
+  "";
+
+if (
+  (!rawImage || String(rawImage).trim() === "") &&
+  imageFormula
+) {
+  const formulaMatch = String(imageFormula).match(
+    /["'](https?:\/\/[^"']+)["']/
+  );
+
+  if (formulaMatch) {
+    rawImage = formulaMatch[1];
+  }
+}
 
   return {
     category_slug: category_slug || "uncategorised",
