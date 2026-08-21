@@ -143,9 +143,17 @@
     reqInput.addEventListener("input", e => { state.requirements = e.target.value; });
 
     AvadheshaMenu.onSelectionChange(() => {
-      renderSelectedMenu();
-      renderQuotation();
-    });
+  renderSelectedMenu();
+  renderQuotation();
+
+  // Re-render the menu so the clicked item's button
+  // immediately changes between "Add to plate" and "Added".
+  const gridContainer = document.getElementById("menuGrid");
+  if (gridContainer) {
+    AvadheshaMenu.renderGrid(gridContainer);
+    observeFadeIns();
+  }
+});
   }
 
   function wireSearchAndFilters() {
