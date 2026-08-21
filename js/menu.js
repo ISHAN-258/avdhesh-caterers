@@ -92,65 +92,167 @@ const AvadheshaMenu = (() => {
   }
 
   function renderGrid(container) {
-    const L = window.AVADHESHA_I18N[currentLang];
-    const items = filteredItems();
-    const groups = groupByCategory(items);
-    container.innerHTML = "";
+  const L = window.AVADHESHA_I18N[currentLang];
+  const items = filteredItems();
+  const groups = groupByCategory(items);
+  container.innerHTML = "";
+  function normalizeImageUrl(url) {
+  if (!url) return "";
 
-    if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "menu-empty";
-      empty.textContent = currentLang === "hi" ? "कोई डिश नहीं मिली।" : "No dishes found.";
-      container.appendChild(empty);
-      return;
-    }
+  let value = String(url).trim();
 
-    groups.forEach((groupItems, slug) => {
-      const catMeta = categories.find(c => c.slug === slug) || { en: slug, hi: slug };
-      const section = document.createElement("div");
-      section.className = "menu-group fade-in";
+  // Google Drive file link:
+  // https://drive.google.com/file/d/FILE_ID/view
+  const driveFileMatch = value.match(
+    /drive\.google\.com\/file\/d\/([^/]+)/
+  );
 
-      const heading = document.createElement("h3");
-      heading.className = "menu-group__title";
-      heading.textContent = currentLang === "hi" ? catMeta.hi : catMeta.en;
-      section.appendChild(heading);
+  if (driveFileMatch) {
+    return `https://drive.google.com/uc?export=view&id=${driveFileMatch[1]}`;
+  }
 
-      const grid = document.createElement("div");
-      grid.className = "menu-grid";
+  // Google Drive open?id=FILE_ID
+  const driveOpenMatch = value.match(
+    /drive\.google\.com\/open\?id=([^&]+)/
+  );
 
-      groupItems.forEach(item => {
-        const card = document.createElement("div");
-        const isSelected = selected.has(item.item_slug);
-        card.className = "menu-card" + (isSelected ? " menu-card--selected" : "");
+  if (driveOpenMatch) {
+    return `https://drive.google.com/uc?export=view&id=${driveOpenMatch[1]}`;
+  }
 
-        const name = document.createElement("div");
-        name.className = "menu-card__name";
-        name.textContent = currentLang === "hi" ? item.item_hi : item.item_en;
+  // Google Drive uc?id=FILE_ID
+  const driveUcMatch = value.match(
+    /drive\.google\.com\/uc\?.*id=([^&]+)/
+  );
 
-        const sub = document.createElement("div");
-        sub.className = "menu-card__sub";
-        sub.textContent = item.price != null
+  if (driveUcMatch) {
+    return `https://drive.google.com/uc?export=view&id=${driveUcMatch[1]}`;
+  }
+
+  // Normal image URL
+  return value;
+}
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "menu-empty";
+    empty.textContent =
+      currentLang === "hi"
+        ? "कोई डिश नहीं मिली।"
+        : "No dishes found.";
+
+    container.appendChild(empty);
+    return;
+  }
+
+  groups.forEach((groupItems, slug) => {
+    const catMeta =
+      categories.find(c => c.slug === slug) || {
+        en: slug,
+        hi: slug
+      };
+
+    const section = document.createElement("div");
+    section.className = "menu-group fade-in";
+
+    const heading = document.createElement("h3");
+    heading.className = "menu-group__title";
+    heading.textContent =
+      currentLang === "hi" ? catMeta.hi : catMeta.en;
+
+    section.appendChild(heading);
+
+    const grid = document.createElement("div");
+    grid.className = "menu-grid";
+
+    groupItems.forEach(item => {
+      const card = document.createElement("div");
+
+      const isSelected = selected.has(item.item_slug);
+
+      card.className =
+        "menu-card" +
+        (isSelected ? " menu-card--selected" : "");
+
+      // -----------------------------
+      // FOOD IMAGE
+      // -----------------------------
+      if (item.image_link) {
+        const imageWrap = document.createElement("div");
+        imageWrap.className = "menu-card__image-wrap";
+
+        const img = document.createElement("img");
+        img.className = "menu-card__image";
+        img.loading = "lazy";
+        img.alt =
+          currentLang === "hi"
+            ? item.item_hi
+            : item.item_en;
+
+        img.src = normalizeImageUrl(item.image_link);
+
+        // Hide image area if the URL is invalid/broken
+        img.addEventListener("error", () => {
+          imageWrap.remove();
+        });
+
+        imageWrap.appendChild(img);
+        card.appendChild(imageWrap);
+      }
+
+      // -----------------------------
+      // ITEM NAME
+      // -----------------------------
+      const name = document.createElement("div");
+      name.className = "menu-card__name";
+      name.textContent =
+        currentLang === "hi"
+          ? item.item_hi
+          : item.item_en;
+
+      // -----------------------------
+      // PRICE
+      // -----------------------------
+      const sub = document.createElement("div");
+      sub.className = "menu-card__sub";
+
+      sub.textContent =
+        item.price != null
           ? `${AvadheshaCalculator.formatINR(item.price)} · ${L.per_plate}`
           : L.unavailable;
 
-        const btn = document.createElement("button");
-        btn.className = "menu-card__btn" + (isSelected ? " menu-card__btn--added" : "");
-        btn.type = "button";
-        btn.disabled = item.price == null;
-        btn.textContent = isSelected ? `✓ ${L.added_to_plate}` : `+ ${L.add_to_plate}`;
-        btn.addEventListener("click", () => { toggleItem(item.item_slug); });
+      // -----------------------------
+      // ADD BUTTON
+      // -----------------------------
+      const btn = document.createElement("button");
 
-        card.appendChild(name);
-        card.appendChild(sub);
-        card.appendChild(btn);
-        grid.appendChild(card);
+      btn.className =
+        "menu-card__btn" +
+        (isSelected
+          ? " menu-card__btn--added"
+          : "");
+
+      btn.type = "button";
+      btn.disabled = item.price == null;
+
+      btn.textContent = isSelected
+        ? `✓ ${L.added_to_plate}`
+        : `+ ${L.add_to_plate}`;
+
+      btn.addEventListener("click", () => {
+        toggleItem(item.item_slug);
       });
 
-      section.appendChild(grid);
-      container.appendChild(section);
-    });
-  }
+      card.appendChild(name);
+      card.appendChild(sub);
+      card.appendChild(btn);
 
+      grid.appendChild(card);
+    });
+
+    section.appendChild(grid);
+    container.appendChild(section);
+  });
+}
   function setSearchTerm(term) { searchTerm = term; }
 
   return {
