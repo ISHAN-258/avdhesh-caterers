@@ -161,27 +161,63 @@ const AvadheshaData = (() => {
 
   /** Validate + normalise one menu row. Returns null if the row should be skipped. */
   function cleanMenuRow(row) {
-    const category_slug = (row.category_slug || "").toString().trim();
-    const item_en = (row.item_en || "").toString().trim();
-    const item_hi = (row.item_hi || "").toString().trim();
-    if (!category_slug && !item_en && !item_hi) return null; // empty row
-    if (!item_en && !item_hi) return null; // no usable name in either language
+  const category_slug = String(row.category_slug || "").trim();
+  const item_en = String(row.item_en || "").trim();
+  const item_hi = String(row.item_hi || "").trim();
 
-    const priceRaw = row.estimated_price_inr;
-    const priceNum = typeof priceRaw === "number" ? priceRaw : parseFloat(priceRaw);
-    const hasValidPrice = Number.isFinite(priceNum) && priceNum > 0;
+  if (!category_slug && !item_en && !item_hi) return null;
+  if (!item_en && !item_hi) return null;
 
-    return {
-      category_slug: category_slug || "uncategorised",
-      category_hi: (row.category_hi || "").toString().trim() || category_slug,
-      category_en: (row.category_en || "").toString().trim() || category_slug,
-      item_hi: item_hi || item_en,
-      item_en: item_en || item_hi,
-      item_slug: (row.item_slug || "").toString().trim() || (item_en || item_hi).toLowerCase().replace(/\s+/g, "_"),
-      price: hasValidPrice ? Math.round(priceNum) : null,
-      image_link: (row.image_link || "").toString().trim(),
-    };
-  }
+  const priceRaw = row.estimated_price_inr;
+  const priceNum =
+    typeof priceRaw === "number"
+      ? priceRaw
+      : parseFloat(String(priceRaw || "").replace(/[₹,\s]/g, ""));
+
+  const hasValidPrice =
+    Number.isFinite(priceNum) && priceNum > 0;
+
+  /*
+   * IMPORTANT:
+   * Keep the image URL from Google Sheets exactly as supplied.
+   * Also support common variations of the column name.
+   */
+  const rawImage =
+    row.image_link ??
+    row.image_url ??
+    row["Image Link"] ??
+    row["Image URL"] ??
+    row.image ??
+    row.Image ??
+    row.photo ??
+    row.Photo ??
+    "";
+
+  return {
+    category_slug: category_slug || "uncategorised",
+
+    category_hi:
+      String(row.category_hi || "").trim() || category_slug,
+
+    category_en:
+      String(row.category_en || "").trim() || category_slug,
+
+    item_hi: item_hi || item_en,
+    item_en: item_en || item_hi,
+
+    item_slug:
+      String(row.item_slug || "").trim() ||
+      (item_en || item_hi)
+        .toLowerCase()
+        .replace(/\s+/g, "_"),
+
+    price: hasValidPrice
+      ? Math.round(priceNum)
+      : null,
+
+    image_link: String(rawImage).trim(),
+  };
+}
 
   /** De-duplicate by item_slug, keep first occurrence. */
   function dedupe(items) {
