@@ -11,6 +11,52 @@ const AvadheshaMenu = (() => {
   let currentLang = "en";
   const listeners = [];
 
+  function normalizeImageUrl(url) {
+  if (!url) return "";
+
+  let value = String(url).trim();
+
+  // Google Drive:
+  // https://drive.google.com/file/d/FILE_ID/view
+  let match = value.match(
+    /drive\.google\.com\/file\/d\/([^/]+)/
+  );
+
+  if (match) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+  }
+
+  // Google Drive:
+  // https://drive.google.com/open?id=FILE_ID
+  match = value.match(
+    /drive\.google\.com\/open\?id=([^&]+)/
+  );
+
+  if (match) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+  }
+
+  // Google Drive:
+  // https://drive.google.com/uc?id=FILE_ID
+  match = value.match(
+    /drive\.google\.com\/uc\?(?:[^#]*&)?id=([^&]+)/
+  );
+
+  if (match) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+  }
+
+  // Googleusercontent image
+  if (
+    value.includes("googleusercontent.com") ||
+    value.startsWith("https://")
+  ) {
+    return value;
+  }
+
+  return value;
+}
+
   function onSelectionChange(fn) { listeners.push(fn); }
   function notify() { listeners.forEach(fn => fn(getSelectedItems())); }
 
@@ -95,43 +141,9 @@ const AvadheshaMenu = (() => {
   const L = window.AVADHESHA_I18N[currentLang];
   const items = filteredItems();
   const groups = groupByCategory(items);
+
   container.innerHTML = "";
-  function normalizeImageUrl(url) {
-  if (!url) return "";
 
-  let value = String(url).trim();
-
-  // Google Drive file link:
-  // https://drive.google.com/file/d/FILE_ID/view
-  const driveFileMatch = value.match(
-    /drive\.google\.com\/file\/d\/([^/]+)/
-  );
-
-  if (driveFileMatch) {
-    return `https://drive.google.com/uc?export=view&id=${driveFileMatch[1]}`;
-  }
-
-  // Google Drive open?id=FILE_ID
-  const driveOpenMatch = value.match(
-    /drive\.google\.com\/open\?id=([^&]+)/
-  );
-
-  if (driveOpenMatch) {
-    return `https://drive.google.com/uc?export=view&id=${driveOpenMatch[1]}`;
-  }
-
-  // Google Drive uc?id=FILE_ID
-  const driveUcMatch = value.match(
-    /drive\.google\.com\/uc\?.*id=([^&]+)/
-  );
-
-  if (driveUcMatch) {
-    return `https://drive.google.com/uc?export=view&id=${driveUcMatch[1]}`;
-  }
-
-  // Normal image URL
-  return value;
-}
   if (!items.length) {
     const empty = document.createElement("p");
     empty.className = "menu-empty";
@@ -157,7 +169,9 @@ const AvadheshaMenu = (() => {
     const heading = document.createElement("h3");
     heading.className = "menu-group__title";
     heading.textContent =
-      currentLang === "hi" ? catMeta.hi : catMeta.en;
+      currentLang === "hi"
+        ? catMeta.hi
+        : catMeta.en;
 
     section.appendChild(heading);
 
@@ -167,63 +181,107 @@ const AvadheshaMenu = (() => {
     groupItems.forEach(item => {
       const card = document.createElement("div");
 
-      const isSelected = selected.has(item.item_slug);
+      const isSelected =
+        selected.has(item.item_slug);
 
       card.className =
         "menu-card" +
-        (isSelected ? " menu-card--selected" : "");
+        (isSelected
+          ? " menu-card--selected"
+          : "");
 
-      // -----------------------------
-      // FOOD IMAGE
-      // -----------------------------
+      /*
+       * -------------------------
+       * FOOD IMAGE
+       * -------------------------
+       */
+
       if (item.image_link) {
-        const imageWrap = document.createElement("div");
-        imageWrap.className = "menu-card__image-wrap";
+        const imageWrap =
+          document.createElement("div");
 
-        const img = document.createElement("img");
-        img.className = "menu-card__image";
+        imageWrap.className =
+          "menu-card__image-wrap";
+
+        const img =
+          document.createElement("img");
+
+        img.className =
+          "menu-card__image";
+
         img.loading = "lazy";
+
         img.alt =
           currentLang === "hi"
             ? item.item_hi
             : item.item_en;
 
-        img.src = normalizeImageUrl(item.image_link);
+        img.src =
+          normalizeImageUrl(
+            item.image_link
+          );
 
-        // Hide image area if the URL is invalid/broken
-        img.addEventListener("error", () => {
-          imageWrap.remove();
-        });
+        img.addEventListener(
+          "error",
+          () => {
+            console.warn(
+              "Image failed:",
+              item.item_en,
+              item.image_link
+            );
+
+            imageWrap.remove();
+          }
+        );
 
         imageWrap.appendChild(img);
         card.appendChild(imageWrap);
       }
 
-      // -----------------------------
-      // ITEM NAME
-      // -----------------------------
-      const name = document.createElement("div");
-      name.className = "menu-card__name";
+      /*
+       * -------------------------
+       * ITEM NAME
+       * -------------------------
+       */
+
+      const name =
+        document.createElement("div");
+
+      name.className =
+        "menu-card__name";
+
       name.textContent =
         currentLang === "hi"
           ? item.item_hi
           : item.item_en;
 
-      // -----------------------------
-      // PRICE
-      // -----------------------------
-      const sub = document.createElement("div");
-      sub.className = "menu-card__sub";
+      /*
+       * -------------------------
+       * PRICE
+       * -------------------------
+       */
+
+      const sub =
+        document.createElement("div");
+
+      sub.className =
+        "menu-card__sub";
 
       sub.textContent =
         item.price != null
           ? `${AvadheshaCalculator.formatINR(item.price)} · ${L.per_plate}`
           : L.unavailable;
 
-      // -----------------------------
-      // ADD BUTTON
-      // -----------------------------
-      const btn = document.createElement("button");
+      /*
+       * -------------------------
+       * ADD BUTTON
+       * -------------------------
+       */
+
+      const btn =
+        document.createElement("button");
+
+      btn.type = "button";
 
       btn.className =
         "menu-card__btn" +
@@ -231,16 +289,20 @@ const AvadheshaMenu = (() => {
           ? " menu-card__btn--added"
           : "");
 
-      btn.type = "button";
-      btn.disabled = item.price == null;
+      btn.disabled =
+        item.price == null;
 
-      btn.textContent = isSelected
-        ? `✓ ${L.added_to_plate}`
-        : `+ ${L.add_to_plate}`;
+      btn.textContent =
+        isSelected
+          ? `✓ ${L.added_to_plate}`
+          : `+ ${L.add_to_plate}`;
 
-      btn.addEventListener("click", () => {
-        toggleItem(item.item_slug);
-      });
+      btn.addEventListener(
+        "click",
+        () => {
+          toggleItem(item.item_slug);
+        }
+      );
 
       card.appendChild(name);
       card.appendChild(sub);
